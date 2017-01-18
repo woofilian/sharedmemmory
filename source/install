@@ -1,0 +1,12 @@
+#!/bin/sh
+
+PWD=`pwd`
+ENGINE_DIR=$PWD/main_engine
+GOAHEAD=$PWD/goahead
+
+cd $ENGINE_DIR
+make clean;make
+
+cd $GOAHEAD
+make clean;make
+

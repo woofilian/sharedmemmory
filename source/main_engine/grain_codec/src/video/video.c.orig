@@ -1,0 +1,1715 @@
+/******************************************************************************
+
+                  版权所有 (C), 2012-2022, bingchuan
+
+ ******************************************************************************
+  文 件 名   : video.c
+  版 本 号   : v1.0
+  作    者   : 9527
+  生成日期   : 2014年7月24日
+  功能描述   : 视频数据的初始化采集
+  函数列表   :
+              video_enc_init
+              video_get_chipinfo
+              video_sys_init
+  修改历史   :
+  1.日    期   : 2014年7月24日
+    作    者   : 9527
+    修改内容   : 创建文件
+
+******************************************************************************/
+
+//video_capture
+
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <sys/time.h>
+#include "gmlib.h"
+#include "sdk_struct.h"
+#include "video.h"
+#include "log.h"
+#include <sys/ioctl.h>
+
+//#define VIDEO_TEST 1
+
+
+/***********************/
+static gm_system_t g_grain_system;
+av_info_t	g_av_info;
+static int  g_video_capture = 0;
+int g_timemode = 0;
+int g_osd_show = 0;
+int g_channelname_show = 0;
+extern SendstreamCallback	mVideoStreamCB ;  //视频回调
+video_info_t  *pvideo_info;
+/************osd**************/
+//#define LOGO_YUV422_PATTERNS     "/mnt/nfs/col_YUV422.bin"//"/mnt/nfs/logo_32x32_yuv422.bin"//
+#define LOGO_YUV422_PATTERNS     "/mnt/nfs/raw2.yuv"//"/mnt/nfs/logo_32x32_yuv422.bin"//
+
+#define LOGO_WIDTH              64
+#define LOGO_HEIGHT             64
+
+/************osg**************/
+#define OSG_LOGO_RGB1555_PATTERNS     "/mnt/nfs/osg_16x72_rgb1555.bin"//"/mnt/nfs/col_RGB.bin" 
+#define OSG_LOGO_WIDTH               16
+#define OSG_LOGO_HEIGHT              72
+
+float temperatureC;
+float humidityRH;
+
+
+/**********************/
+static char *video_type_str[] =
+{
+    "SDK_VIDEO_FORMAT_H264 ",
+    "SDK_VIDEO_FORMAT_MPEG4",
+    "SDK_VIDEO_FORMAT_MJPEG"
+};
+
+
+static int video_get_chipinfo(void)
+{
+    FILE *fp;
+    char buffer[256];
+    int i;
+    int chipid;
+    char *match;
+
+    fp = fopen("/proc/pmu/chipver","r");
+    i = fread(buffer,1,sizeof(buffer),fp);
+    fclose(fp);
+    if (i == 0)
+        return 0;
+    buffer[i] = '\0';
+    match = strstr(buffer, "81");
+    if (match == NULL)
+        return 0;
+    sscanf(match,"%X",&chipid);
+    return chipid;
+}
+
+int video_sys_init()
+{
+    int chipid;
+    int i;
+    gm_init(); //gmlib initial
+    gm_get_sysinfo(&g_grain_system);
+    //chipid = video_get_chipinfo();
+    chipid = 0x8136;//(chipid >> 16)&0x0000ffff;
+
+    info("video_sys_init chip ID:%x \n",chipid);
+
+#if 0
+    info("\n\n\n =========show info:=============\n"
+         "graph_type :%d 					\n"
+         "gm_lib_version :%d 				\n"
+         ,g_grain_system.graph_type
+         ,g_grain_system.gm_lib_version);
+
+    for(i = 0 ; i < 32; i ++)
+    {
+        info("cap[%d]: valid[%d] number_of_path[%d] framerate[%d] width[%d] height[%d] chipid[%x] is_present[%d]\n"
+             ,i,g_grain_system.cap[i].valid
+             ,g_grain_system.cap[i].number_of_path
+             ,g_grain_system.cap[i].framerate
+             ,g_grain_system.cap[i].dim.width
+             ,g_grain_system.cap[i].dim.height
+             ,g_grain_system.cap[i].chipid
+             ,g_grain_system.cap[i].is_present);
+
+        info("au_grab[%d]: valid[%d] valid[%d] channel_type[%d] sample_rate[%d] sample_size[%d] ssp[%d]\n"
+             ,i,g_grain_system.au_grab[i].valid
+             ,g_grain_system.au_grab[i].channel_type
+             ,g_grain_system.au_grab[i].sample_rate
+             ,g_grain_system.au_grab[i].sample_size
+             ,g_grain_system.au_grab[i].ssp);
+
+        info("au_render[%d]: valid[%d] valid[%d] channel_type[%d] sample_rate[%d] sample_size[%d] ssp[%d]\n"
+             ,i,g_grain_system.au_render[i].valid
+             ,g_grain_system.au_render[i].channel_type
+             ,g_grain_system.au_render[i].sample_rate
+             ,g_grain_system.au_render[i].sample_size
+             ,g_grain_system.au_render[i].ssp);
+
+    }
+    info("=========end=============\n\n\n");
+#endif
+
+    memset(&g_av_info,0,sizeof(av_info_t));
+    g_av_info.max_audio_stream_num = 1;
+    g_av_info.max_video_stream_num = 3;
+    g_av_info.video_groupfd = gm_new_groupfd();
+    ///g_av_info.audio_groupfd = gm_new_groupfd();
+
+    return 0;
+}
+int video_sys_uninit()
+{
+    gm_release();
+}
+
+//mult-channel only support h264  多路码流的时候只支持H264模式
+int video_enc_init(int ch,sdk_av_enc_t *pav_enc)
+{
+    int  width = 0,height = 0;
+
+    if(ch < 0 || ch > MAX_VIDEO_STREAM_NUM || (!pav_enc))
+    {
+        error("ch > MAX_VIDEO_STREAM_NUM || (!pav_enc) \n");
+        return -1;
+    }
+    int enc_type =  pav_enc->video_type ;//SDK_VIDEO_FORMAT_E
+    if(enc_type != SDK_VIDEO_FORMAT_H264 && ch > 0 )
+    {
+        error("enc_type != SDK_VIDEO_FORMAT_H264 && ch > 0 \n");
+        return -1;
+    }
+    pvideo_info = &g_av_info.video_info[ch];
+    //if (pvideo_info->capture_object == NULL)
+    //{
+    DECLARE_ATTR(cap_attr, gm_cap_attr_t);
+    //DECLARE_ATTR(dnr_attr, gm_3dnr_attr_t);
+
+    pvideo_info->capture_object = gm_new_obj(GM_CAP_OBJECT); // new capture object
+    cap_attr.cap_vch = 0;  //默认为0
+
+    //GM813x capture path 0(liveview), 1(substream), 2(substream), 3(mainstream)
+    //GM8139/GM8287 capture path 0(liveview), 1(CVBS), 2(can scaling), 3(can't scaling down)
+
+    cap_attr.path = (ch == 0) ? 2:0;
+    cap_attr.enable_mv_data = (ch == 0) ? 1:0; //第 0 通道移动侦测打开
+
+    gm_set_attr(pvideo_info->capture_object, &cap_attr); // set capture attribute
+    //dnr_attr.enabled = 1;
+    //gm_set_attr(pvideo_info->capture_object, &dnr_attr);
+    //// memcpy(&param->cap.cap_attr, &cap_attr, sizeof(gm_cap_attr_t));
+    ////  memcpy(&param->cap.dnr_attr, &dnr_attr, sizeof(gm_3dnr_attr_t));
+    //}
+
+    pvideo_info->video_object = gm_new_obj(GM_ENCODER_OBJECT); // new encoder object
+    pvideo_info->video_type = enc_type;
+
+    resolution_2_pic(0,pav_enc->resolution, &pvideo_info->video_width, &pvideo_info->video_height);
+    pvideo_info->frame_rate = pav_enc->frame_rate;
+    if(!pvideo_info->video_buf )
+    {
+        pvideo_info->video_buf_len = pvideo_info->video_width*pvideo_info->video_height*3/2;
+        pvideo_info->video_buf     = malloc(pvideo_info->video_buf_len);
+        memset(pvideo_info->video_buf, 0, pvideo_info->video_buf_len);
+
+    }
+    DECLARE_ATTR(h264e_attr, gm_h264e_attr_t);
+    switch (enc_type)
+    {
+    case SDK_VIDEO_FORMAT_H264:
+        h264e_attr.dim.width = pvideo_info->video_width;
+        h264e_attr.dim.height = pvideo_info->video_height;
+        h264e_attr.frame_info.framerate = pav_enc->frame_rate;
+        h264e_attr.ratectl.mode = pav_enc->bitrate_type + 1;  //GM_CBR
+        h264e_attr.ratectl.gop = pav_enc->gop;
+        h264e_attr.ratectl.bitrate = pav_enc->bitrate;
+        h264e_attr.ratectl.bitrate_max = pav_enc->bitrate;
+        h264e_attr.b_frame_num = 0;  // B-frames per GOP (H.264 high profile)
+        h264e_attr.enable_mv_data = 0;  // disable H.264 motion data output
+        h264e_attr.ratectl.init_quant = 25;
+        h264e_attr.ratectl.min_quant = 1;
+        h264e_attr.ratectl.max_quant = 51;
+        error("111111111111111111 \n");
+        gm_set_attr(pvideo_info->video_object, &h264e_attr);
+        /// memcpy(&param->enc[rec_track].codec.h264e_attr, &h264e_attr, sizeof(gm_h264e_attr_t));
+        break;
+#if 0
+    case SDK_VIDEO_FORMAT_MPEG4:
+        DECLARE_ATTR(mpeg4e_attr, gm_mpeg4e_attr_t);
+        mpeg4e_attr.dim.width = width;
+        mpeg4e_attr.dim.height = height;
+        mpeg4e_attr.frame_info.framerate = framerate;
+        mpeg4e_attr.ratectl.mode = mode;
+        mpeg4e_attr.ratectl.gop = 60;
+        mpeg4e_attr.ratectl.bitrate = bitrate;
+        mpeg4e_attr.ratectl.bitrate_max = bitrate;
+        gm_set_attr(param->enc[rec_track].obj, &mpeg4e_attr);
+        memcpy(&param->enc[rec_track].codec.mpeg4e_attr, &mpeg4e_attr, sizeof(gm_mpeg4e_attr_t));
+        break;
+    case SDK_VIDEO_FORMAT_MJPEG:
+        DECLARE_ATTR(mjpege_attr, gm_mjpege_attr_t);
+        mjpege_attr.dim.width = width;
+        mjpege_attr.dim.height = height;
+        mjpege_attr.frame_info.framerate = framerate;
+        mjpege_attr.quality = 30;
+        gm_set_attr(param->enc[rec_track].obj, &mjpege_attr);
+        memcpy(&param->enc[rec_track].codec.mjpege_attr, &mjpege_attr, sizeof(gm_mjpege_attr_t));
+        break;
+#endif
+    default:
+        warning("Not support enc_type %d \n", enc_type);
+        break;
+    }
+    // bind channel recording
+    //抓取通道  和编码通道绑定
+    warning("gm_bind ----------------------?>Jensen\n");
+    pvideo_info->video_fd = gm_bind(g_av_info.video_groupfd, pvideo_info->capture_object, pvideo_info->video_object);
+    return 0;
+}
+
+int video_enc_uninit(int ch)
+{
+    video_info_t  *pvideo_info = &g_av_info.video_info[ch];
+
+    gm_unbind(pvideo_info->video_fd);
+    gm_apply(g_av_info.video_groupfd);
+
+    gm_delete_obj(pvideo_info->video_object);
+    gm_delete_obj(pvideo_info->capture_object);
+
+    if(pvideo_info->video_buf)
+        free(pvideo_info->video_buf);
+    pvideo_info->video_buf = NULL;
+    pvideo_info->video_buf_len = 0;
+    return 0;
+
+}
+//获取绑定句柄句柄
+int get_video_bind_handle(int ch,int sub_ch)
+{
+    video_info_t  *pvideo_info = &g_av_info.video_info[0];
+    //warning("g_av_info.video_info[0].video_fd  [%d]  pvideo_info->video_fd %d\n",g_av_info.video_info[0].video_fd,pvideo_info->video_fd);
+    return pvideo_info->video_fd;
+
+}
+void *get_video_object(int ch,int sub_ch)
+{
+    video_info_t  *pvideo_info = &g_av_info.video_info[0];
+    return pvideo_info->video_object;
+}
+
+int get_sys_info(gm_system_t *grain_system)
+{
+    if(!grain_system)
+        return -1;
+
+    memset(grain_system,0,sizeof(gm_system_t));
+    memcpy(grain_system,&g_grain_system,sizeof(gm_system_t));
+    return  0;
+}
+
+static int video_capture_start()
+{
+    int ret = -1;
+    ret = gm_apply(g_av_info.video_groupfd); // active setting
+    if(ret < 0 )
+    {
+        info("video_capture_start failed!!! \n");
+    }
+
+}
+/***********************************/
+#ifdef VIDEO_TEST
+h264_write_fd[3] = { -1};
+static int init_write_fd()
+{
+    int i;
+    char filename[50];
+    for(i = 0 ; i < 2 ; i++)
+    {
+        sprintf(filename, "/mnt/nfs/stream%d.264", i);
+        h264_write_fd[i] = open(filename,  O_WRONLY | O_CREAT, 0644);
+    }
+    return 0;
+}
+
+
+static int write_video_data(int ch,const char *video_data,int data_len)
+{
+    if(ch > 2)
+        return -1;
+
+    int ret =  write(h264_write_fd[ch],video_data,data_len);
+    if(ret < 0)
+    {
+        error("write_video_data !!! ret = %d \n",ret);
+    }
+    sync();
+
+}
+#endif
+static int g_frame_no[MAX_VIDEO_STREAM_NUM] = {0};
+inline unsigned int get_time_stamp(struct timeval tv)
+{
+    return (tv.tv_sec*1000 + tv.tv_usec/1000);
+}
+
+static inline int write_video_streaming(int ch, gm_enc_bitstream_t *bs)
+{
+#if 1
+    struct timeval tv;
+    video_info_t  *pvideo_info = &g_av_info.video_info[ch];
+
+    sdk_stream_info_t stream_info;
+    memset(&stream_info,0,sizeof(sdk_stream_info_t));
+    stream_info.ch = ch ;
+    stream_info.sub_ch = 0;
+
+
+    stream_info.frame_head.frame_type = (bs->keyframe == 1)?SDK_VIDEO_FRAME_I:SDK_VIDEO_FRAME_P;
+    stream_info.frame_head.frame_size = bs->bs_len;
+    stream_info.frame_head.frame_no = g_frame_no[ch]++;
+    gettimeofday(&tv, NULL);
+    stream_info.frame_head.sec = tv.tv_sec;				   //帧时间（秒）
+    stream_info.frame_head.usec == tv.tv_usec;             //帧时间（微秒）
+    ////stream_info.frame_head.pts =  bs->timestamp;		   //这个时间戳不准
+    stream_info.frame_head.pts =  tv.tv_sec *1000 + tv.tv_usec/1000;
+    stream_info.frame_addr = (const char *)(bs->bs_buf);
+    stream_info.frame_head.video_info.encode_type = 0;
+    stream_info.frame_head.video_info.standard = 0;
+
+    //stream_info.frame_head.video_info.resolution= g_video_info[ch_type].resolution;
+    stream_info.frame_head.video_info.width = pvideo_info->video_width;
+    stream_info.frame_head.video_info.height= pvideo_info->video_height;
+    stream_info.frame_head.video_info.frame_rate = pvideo_info->frame_rate;
+
+
+    if(mVideoStreamCB)
+        mVideoStreamCB((void *)&stream_info);
+    return 0;
+#endif
+
+}
+
+
+static void *video_capture_thread(void *arg)
+{
+    int ret = 0;
+    int i = 0 ;
+    video_info_t  *pvideo_infos = NULL;
+    gm_enc_multi_bitstream_t *pmulti_bs = NULL;
+    char *bitstream_data[MAX_VIDEO_STREAM_NUM];
+    gm_pollfd_t poll_fds[MAX_VIDEO_STREAM_NUM];
+    gm_enc_multi_bitstream_t multi_bs[MAX_VIDEO_STREAM_NUM];
+
+    memset(poll_fds, 0, sizeof(poll_fds));
+    /*** Capture mainstream stream */
+    poll_fds[0].bindfd = g_av_info.video_info[0].video_fd;
+    poll_fds[0].event = GM_POLL_READ;
+    /*** Capture another path substream */
+    poll_fds[1].bindfd = g_av_info.video_info[1].video_fd;
+    poll_fds[1].event = GM_POLL_READ;
+    /*** Capture another path substream */
+    //poll_fds[2].bindfd = g_av_info.video_info[2].video_fd;
+    //poll_fds[2].event = GM_POLL_READ;
+    g_video_capture = 1;
+    warning ("g_av_info.video_info[0].video_fd   is  >>>>>>>[%d]\n",g_av_info.video_info[0].video_fd);
+    while(g_video_capture)
+    {
+        //warning(" g_av_info.video_info[0].video_fd  is  [%d]\n", g_av_info.video_info[0].video_fd);
+        /** poll bitstream until 500ms timeout */
+        ret = gm_poll(poll_fds, MAX_VIDEO_STREAM_NUM, 500);
+        if (ret == GM_TIMEOUT)
+        {
+            info("Poll timeout!! \n");
+            continue;
+        }
+        memset(multi_bs, 0, sizeof(multi_bs));  //clear all mutli bs
+        for (i = 0; i < MAX_VIDEO_STREAM_NUM; i++)
+        {
+            if (poll_fds[i].revent.event != GM_POLL_READ)
+                continue;
+            if (poll_fds[i].revent.bs_len > g_av_info.video_info[i].video_buf_len)
+            {
+                printf("bitstream buffer length is not enough! %d, %d\n",
+                       poll_fds[i].revent.bs_len, g_av_info.video_info[i].video_buf_len);
+                continue;
+            }
+            multi_bs[i].bindfd = poll_fds[i].bindfd;
+            multi_bs[i].bs.bs_buf = g_av_info.video_info[i].video_buf;  // set buffer point(指定输出缓冲指针位置)
+            multi_bs[i].bs.bs_buf_len = g_av_info.video_info[i].video_buf_len;  // set buffer length(指定缓冲长度)
+            multi_bs[i].bs.mv_buf = 0;  // not to recevie MV data
+            multi_bs[i].bs.mv_buf_len = 0;  // not to recevie MV data
+        }
+
+        if( (ret = gm_recv_multi_bitstreams(&multi_bs[0],MAX_VIDEO_STREAM_NUM)) < 0 )
+        {
+            // <=-1:fail, 0:success
+            info("Error to receive bitstream. ret(%d)\n", ret);
+            continue;  // while(1) {
+        }
+
+        for (i = 0; i < MAX_VIDEO_STREAM_NUM; i++)
+        {
+            pvideo_infos = &g_av_info.video_info[i];
+#if 0
+            if ((multi_bs[i].retval < 0) && pvideo_info->video_fd)
+                info("CH%2d Error to receive bitstream. ret=%d\n", i, multi_bs[i].retval );
+            else if (multi_bs[i].retval == GM_SUCCESS)
+#else
+            if (multi_bs[i].retval == GM_SUCCESS)
+#endif
+            {
+                if (multi_bs[i].bs.newbs_flag & GM_FLAG_NEW_BITRATE)
+                {
+                    info("<CH%d, newbsflag=0x%x detect bitrate change>\n", i,
+                         multi_bs[i].bs.newbs_flag);
+                }
+                if (multi_bs[i].bs.newbs_flag & GM_FLAG_NEW_FRAME_RATE)
+                {
+                    info("<CH%d, newbsflag=0x%x detect framerate change>\n", i,
+                         multi_bs[i].bs.newbs_flag);
+                }
+                if (multi_bs[i].bs.newbs_flag & GM_FLAG_NEW_GOP)
+                {
+                    info("<CH%d, newbsflag=0x%x detect GOP change>\n", i,
+                         multi_bs[i].bs.newbs_flag);
+                }
+#ifdef VIDEO_TEST
+                write_video_data( i,(const char *)multi_bs[i].bs.bs_buf,multi_bs[i].bs.bs_len);
+#endif
+                ///printf("data coming.... \n");
+                write_video_streaming(i, &multi_bs[i].bs);
+
+            }
+            //print_enc_average(i, j, bs[i][j].bs.bs_len, &prev);
+        }
+
+    }
+    info("thread exit......\n");
+}
+
+
+
+
+static pthread_t video_capture_id = 0;
+///pthread_t encode_thread_id = 0;
+int video_server_start()
+{
+    pthread_attr_t attr;
+    int ret ;
+#ifdef VIDEO_TEST
+    init_write_fd();
+#endif
+    video_capture_start();
+    /* Record Thread */
+    if (video_capture_id == (pthread_t)NULL)
+    {
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);  //分离的线程
+        ret = pthread_create(&video_capture_id, &attr, &video_capture_thread, NULL);
+        pthread_attr_destroy(&attr);
+    }
+    else
+    {
+        info("video_capture_thread is already runing..... \n");
+    }
+
+    return 0;
+}
+//停止取流 释放资源
+int video_server_stop()
+{
+    g_video_capture = 0 ;
+    return 0;
+}
+
+//强制I帧
+int video_force_i_frame(int ch)
+{
+    int ret = -1;
+    if(ch < 0 || ch > MAX_VIDEO_STREAM_NUM)
+    {
+        error("ch out of rang!!!  \n");
+        return -1;
+    }
+    video_info_t  *pvideo_info = &g_av_info.video_info[ch];
+    if(pvideo_info->video_fd < 0)
+    {
+        error("video_fd < 0   ch:%d \n",ch);
+        return -1;
+    }
+    if(gm_request_keyframe(pvideo_info->video_fd) < 0)
+    {
+        error("gm_request_keyframe faile \n");
+        return -1;
+    }
+}
+
+int video_set_enc_attr(int ch,sdk_av_enc_t *pav_enc)
+{
+    int ret = -1;
+    if(ch < 0 || ch > MAX_VIDEO_STREAM_NUM || (!pav_enc))
+    {
+        error("ch > MAX_VIDEO_STREAM_NUM || (!pav_enc) \n");
+        return -1;
+    }
+
+    int enc_type =  pav_enc->video_type ;//SDK_VIDEO_FORMAT_E
+    if(enc_type != SDK_VIDEO_FORMAT_H264 && ch > 0 )
+    {
+        error("enc_type != SDK_VIDEO_FORMAT_H264 && ch > 0 \n");
+        return -1;
+    }
+    video_info_t  *pvideo_info = &g_av_info.video_info[ch];
+    resolution_2_pic(0,pav_enc->resolution, &pvideo_info->video_width, &pvideo_info->video_height);
+    pvideo_info->frame_rate = pav_enc->frame_rate;
+
+    DECLARE_ATTR(h264e_attr, gm_h264e_attr_t);
+    //暂时只支持h264
+    switch (enc_type)
+    {
+    case SDK_VIDEO_FORMAT_H264:
+        h264e_attr.dim.width = pvideo_info->video_width;
+        h264e_attr.dim.height = pvideo_info->video_height;
+        h264e_attr.frame_info.framerate = pav_enc->frame_rate;
+        h264e_attr.ratectl.mode = pav_enc->bitrate_type + 1;  //GM_CBR
+        h264e_attr.ratectl.gop = pav_enc->gop;
+        h264e_attr.ratectl.bitrate = pav_enc->bitrate;
+        h264e_attr.ratectl.bitrate_max = pav_enc->bitrate;
+        h264e_attr.b_frame_num = 0;  // B-frames per GOP (H.264 high profile)
+        h264e_attr.enable_mv_data = 0;  // disable H.264 motion data output
+        h264e_attr.ratectl.init_quant = 25; //暂时没加 后面看CMS传值信息
+        h264e_attr.ratectl.min_quant = 1;
+        h264e_attr.ratectl.max_quant = 51;
+        ///gm_set_attr(pvideo_info->video_object, &h264e_attr);
+        /// memcpy(&param->enc[rec_track].codec.h264e_attr, &h264e_attr, sizeof(gm_h264e_attr_t));
+        break;
+#if 0
+    case SDK_VIDEO_FORMAT_MPEG4:
+        DECLARE_ATTR(mpeg4e_attr, gm_mpeg4e_attr_t);
+        mpeg4e_attr.dim.width = width;
+        mpeg4e_attr.dim.height = height;
+        mpeg4e_attr.frame_info.framerate = framerate;
+        mpeg4e_attr.ratectl.mode = mode;
+        mpeg4e_attr.ratectl.gop = 60;
+        mpeg4e_attr.ratectl.bitrate = bitrate;
+        mpeg4e_attr.ratectl.bitrate_max = bitrate;
+        gm_set_attr(param->enc[rec_track].obj, &mpeg4e_attr);
+        memcpy(&param->enc[rec_track].codec.mpeg4e_attr, &mpeg4e_attr, sizeof(gm_mpeg4e_attr_t));
+        break;
+    case SDK_VIDEO_FORMAT_MJPEG:
+        DECLARE_ATTR(mjpege_attr, gm_mjpege_attr_t);
+        mjpege_attr.dim.width = width;
+        mjpege_attr.dim.height = height;
+        mjpege_attr.frame_info.framerate = framerate;
+        mjpege_attr.quality = 30;
+        gm_set_attr(param->enc[rec_track].obj, &mjpege_attr);
+        memcpy(&param->enc[rec_track].codec.mjpege_attr, &mjpege_attr, sizeof(gm_mjpege_attr_t));
+        break;
+#endif
+    default:
+        warning("Not support enc_type %d \n", enc_type);
+        break;
+    }
+
+    gm_set_attr(pvideo_info->video_object, &h264e_attr);
+    if (gm_apply(g_av_info.video_groupfd) < 0)
+    {
+        // active setting (使生效)
+        error("Error! gm_apply fail, AP procedure something wrong! \n");
+        return -1;
+    }
+    return 0;
+}
+
+
+//视频遮挡区域设置
+int video_set_overlay_attr(int ch)
+{
+    return 0;
+}
+/**********移动侦测*****************/
+///int video_init_motion(int total_ch,sdk_vda_codec_cfg_t *motion_cfg)
+int video_init_motion(int total_ch)
+
+{
+    int i,ret = -1;
+
+    ret = init_motion_server();
+    //这里目前只有一个主通道所以
+    //ret = set_motion_param(0, motion_cfg);
+    return ret;
+
+}
+int video_uninit_motion(int total_ch)
+{
+    uninit_motion_server();
+}
+
+//移动侦测报警区域设置
+int video_set_motion_attr(int ch,sdk_vda_codec_cfg_t *motion_cfg)
+{
+    return set_motion_param(ch, motion_cfg);
+
+}
+
+void set_motion_param_test()
+{
+#if 1
+    sdk_vda_codec_cfg_t md;
+    sdk_vda_codec_cfg_t mt_cfg;
+    sdk_motion_cfg_t    motion_cfg;
+    //获取移动侦测的参数
+    //adapt_param_get_motion_cfg(&motion_cfg);
+
+    memset(&mt_cfg,0,sizeof(sdk_vda_codec_cfg_t));
+    mt_cfg.enable=1;
+    mt_cfg.sensitive=5;
+    int j;
+    for (j = 0; j < 4; j++)
+    {
+
+        mt_cfg.area[j].x=0;
+        mt_cfg.area[j].y=0;
+        mt_cfg.area[j].width=1280;
+        mt_cfg.area[j].height=720;
+        mt_cfg.mode=0;
+    }
+
+    warning("======================================================= \n");
+    sdk_av_set_motion_param(0, &mt_cfg);
+#endif
+}
+
+int video_motion_server_start()
+{
+    int ch_num = 0;
+    int ret;
+
+    warning("MD FUNCTION START>>>>>>>>>>>>>>>>>>\n");
+    //video_init_motion(1);
+    //motion_detection_init();
+    //ret = set_interesting_region(ch_num);
+    //set_motion_param_test();
+    start_motion_server();
+    return 0;
+}
+
+int video_motion_server_stop()
+{
+    stop_motion_server();
+    return 0;
+}
+/*********OSD *********************/
+//osd 配置
+int video_osd_server_start();
+
+int video_init_osd(int total_ch)
+{
+    pthread_t enc_thread_osd;
+    int ret,ret1;
+    gm_palette_table_t palette=
+    {
+palette_table:
+        {
+            OSD_PALETTE_COLOR_AQUA,
+            OSD_PALETTE_COLOR_BLACK,
+            OSD_PALETTE_COLOR_BLUE,
+            OSD_PALETTE_COLOR_BROWN,
+            OSD_PALETTE_COLOR_DODGERBLUE,
+            OSD_PALETTE_COLOR_GRAY,
+            OSD_PALETTE_COLOR_GREEN,
+            OSD_PALETTE_COLOR_KHAKI,
+            OSD_PALETTE_COLOR_LIGHTGREEN,
+            OSD_PALETTE_COLOR_MAGENTA,
+            OSD_PALETTE_COLOR_ORANGE,
+            OSD_PALETTE_COLOR_PINK,
+            OSD_PALETTE_COLOR_RED,
+            OSD_PALETTE_COLOR_SLATEBLUE,
+            OSD_PALETTE_COLOR_WHITE,
+            OSD_PALETTE_COLOR_YELLOW
+        }
+    };
+    //ret = gm_set_palette_table(&palette);
+    //if (ret < 0)
+    //{
+    //    perror("Set osd palette failed");
+    //    return -1;
+    // }
+    info("video_init_osd start !!!!!!!!! \n");
+    ret1 = pthread_create(&enc_thread_osd, NULL, video_osd_server_start, NULL);
+    if (ret1 < 0)
+    {
+        perror("create osd_start thread failed");
+        return -1;
+    }
+
+    info("video_init_osd end !!!!!!!!! \n");
+    return 0;
+}
+
+
+int char2int(char v[2])
+{
+    int a,b;
+
+    if(v[0] >= '0' && v[0] <= '9')
+        a = v[0] - '0';
+    else if(v[0] >= 'a' && v[0] <= 'f')
+        a = v[0] - 'a' + 10;
+    else if(v[0] >= 'A' && v[0] <= 'F')
+        a = v[0] - 'A' + 10;
+    else
+        return -1;
+    if(v[1] >= '0' && v[1] <= '9')
+        b = v[1] - '0';
+    else if(v[1] >= 'a' && v[1] <= 'f')
+        b = v[1] - 'a' + 10;
+    else if(v[1] >= 'A' && v[1] <= 'F')
+        b = v[1] - 'A' + 10;
+    else
+        return -1;
+    return a*16+b;
+}
+
+int get_i2c_val(unsigned char *val, int num)
+{
+    char 	cmd[256];
+    int		fd = -1;
+    char	*p = NULL;
+    int 	ret = 0;
+    int i ;
+    fd = fopen("/tmp/i2c_val", "a+");
+    if (fd == NULL)
+    {
+        printf("i2c value:: fd==NULL\n");
+        return -1;
+    }
+    memset(cmd, 0, sizeof(cmd));
+    for(i = 0; i < num; i++)
+    {
+        if(fgets(cmd, 256, fd) != NULL)
+        {
+            p = strstr(cmd, "read:0x");
+            if(p)
+            {
+                p = p + 7;
+                val[i] = char2int(p);
+                ret = 0;
+
+            }
+            else
+            {
+                ret = -1;
+            }
+
+        }
+        else
+        {
+            ret = -1;
+        }
+    }
+    system("rm -rf /tmp/i2c_val");
+    return ret;
+}
+
+void gettmp()
+{
+    int ret;
+    unsigned char datatmp[2];
+    unsigned short u16sT;
+    //float temperatureC;
+    //e3  tmperature
+    system("i2c_access 0x81 w 0xe3 r 0x02 > /tmp/i2c_val");
+    //get high8 low8
+    ret = get_i2c_val(datatmp,2);
+    u16sT= (datatmp[0]<<8)|datatmp[1];
+    u16sT &= ~0x0003;
+    //printf("ending tmp16: 0x%x  \n",u16sT);
+    temperatureC= -46.85 + ((175.72/65536.00000) *(float) u16sT); //T= -46.85 + 175.72 * ST/2^16
+    printf("temperatureC:%6.2fC\n.",temperatureC);
+    //return temperatureC;
+}
+
+void getRH()
+{
+    //e5  RH
+    int ret;
+    unsigned char dataRH[2];
+    unsigned short u16sRH;
+    //float humidityRH;              // variable for result
+    char t ='%';
+    system("i2c_access 0x81 w 0xe5 r 0x02 > /tmp/i2c_val");
+    //get high8 low8
+    ret = get_i2c_val(dataRH,2);
+    u16sRH= (dataRH[0]<<8)|dataRH[1];
+    u16sRH &= ~0x0003;
+    //printf("ending rh16: 0x%x \n",u16sRH);
+    humidityRH = -6.0 + ((125.0/65536.00000) * (float)u16sRH); // RH= -6 + 125 * SRH/2^16
+    printf("humidityRH: %f%c\n.",humidityRH,t);
+    //return humidityRH;
+}
+
+void update_osd_mask(int ch,int mask_idx, int x, int y, int width, int height, int alpha, int palette_idx)
+{
+    gm_osd_mask_t osd_mask;
+
+    /** setup OSD mask */
+    osd_mask.enabled = 1;
+    osd_mask.mask_idx = mask_idx;
+    osd_mask.x = x;
+    osd_mask.y = y;
+    osd_mask.width = width;
+    osd_mask.height = height;
+    osd_mask.alpha = alpha;		//(0-7)   0%->100%
+    osd_mask.palette_idx = palette_idx;
+    osd_mask.border.type = GM_OSD_MASK_BORDER_TYPE_TRUE;
+    osd_mask.border.width = 1;
+    osd_mask.align_type = GM_OSD_ALIGN_TOP_LEFT;
+    gm_set_osd_mask(g_av_info.video_info[ch].capture_object, &osd_mask, GM_ALL_PATH);//set OSD attribute(设置OSD属性)
+}
+
+int init_osdtime()
+{
+    time_t tm;
+    struct tm *ptr;
+    time_t lt;
+    time(&lt);
+    ptr = localtime(&lt);//获取当前时间
+    char dates[100];
+    memset(dates,0,100);
+    if (g_timemode == 0)
+    {
+        sprintf(dates,"%4d/%02d/%02d  %02d:%02d:%02d",ptr->tm_year+1900,ptr->tm_mon+1,ptr->tm_mday,ptr->tm_hour,ptr->tm_min,ptr->tm_sec);
+    }
+    else if(g_timemode == 1)
+    {
+        sprintf(dates,"%02d/%02d/%4d  %02d:%02d:%02d",ptr->tm_mon+1,ptr->tm_mday,ptr->tm_year+1900,ptr->tm_hour,ptr->tm_min,ptr->tm_sec);
+    }
+    else
+    {
+        sprintf(dates,"%02d/%02d/%4d  %02d:%02d:%02d",ptr->tm_mday,ptr->tm_mon+1,ptr->tm_year+1900,ptr->tm_hour,ptr->tm_min,ptr->tm_sec);
+    }
+    update_osd_with_hzk(g_av_info.video_info[0].capture_object, 32, 1, 34, 10, 1, dates,  0, 0);//main_capture_object
+    update_osd_with_hzk(g_av_info.video_info[1].capture_object, 16, 5, 32+64+32+32+32, 10, 1, dates,  0, 0);//sub_capture_object
+
+    return 0;
+}
+int init_osdinfo()
+{
+    //test
+    unsigned char names[21] = "ausdom.cn ";
+
+    unsigned char tmp[21];
+    unsigned char RH[21];
+    //memset(tmp,0,sizeof(tmp));
+    //memset(RH,0,sizeof(RH));
+    update_osd_with_hzk(g_av_info.video_info[0].capture_object, 32, 0, 0, 5, 1, names, 1100, 670);//main_capture_object
+    update_osd_with_hzk(g_av_info.video_info[1].capture_object, 16, 5, 32+64+32+32, 4, 1, names, 0, 35);//sub_capture_object
+
+#if 0
+
+    gettmp();
+    getRH();
+    printf("jy test.........................\n");
+    sprintf(tmp,"%s %6.2f%s","温度",temperatureC,"C");//℃
+    sprintf(RH,"%s %6.2f%s","湿度",humidityRH,"%");
+    warning("temperatureC is %6.2f ,%s, humidityRH is %6.2f, %s\n",temperatureC,tmp,humidityRH,RH);
+    update_osd_with_hzk(g_av_info.video_info[0].capture_object, 32, 2, 32+100+32-16, 6, 1, tmp, 50, 110);//main_capture_object
+    update_osd_with_hzk(g_av_info.video_info[0].capture_object, 32, 3, 32+200+32, 6, 1, RH,  50, 160);//main_capture_object
+
+#endif
+    return 0;
+}
+
+int video_uninit_osd(int total_ch)
+{
+    return 0;
+}
+int video_set_osd_attr(int ch, sdk_osd_cfg_t *osd_cfg)
+{
+    video_info_t  *pvideo_info = &g_av_info.video_info[ch];
+    //set_osd_font_chinese(pvideo_info->capture_object);
+    g_timemode = osd_cfg->time.format;
+    g_osd_show = osd_cfg->time.valid;
+    g_channelname_show = osd_cfg->chann_name.valid;
+    warning("TUTK  set  g_timemode is %d   g_osd_show is %d g_channelname_show %d\n",g_timemode,g_osd_show,g_channelname_show);
+    return 0;
+}
+int video_get_osd_attr(int ch)
+{
+    return ;
+}
+
+
+static void *osd_capture_thread(void *arg)
+{
+    int times = 0;
+    while(1)
+    {
+
+        if(!g_channelname_show && g_osd_show)
+        {
+            times = 0;
+            init_osdtime();
+            //init_osdinfo();
+            //update_osd_marks();
+        }
+        else if(g_channelname_show && !g_osd_show)
+        {
+            times = 0;
+            init_osdinfo();
+        }
+        else if(g_channelname_show && g_osd_show)
+        {
+            init_osdtime();
+            init_osdinfo();
+        }
+        else
+        {
+            if (times == 0)
+            {
+                times ++;
+                gm_unbind(g_av_info.video_info[0].capture_object);
+                gm_unbind(g_av_info.video_info[1].capture_object);
+                gm_apply(g_av_info.video_info[0].capture_object);
+                gm_apply(g_av_info.video_info[1].capture_object);
+                gm_delete_obj(g_av_info.video_info[0].capture_object);
+                gm_delete_obj(g_av_info.video_info[1].capture_object);
+                gm_release();
+            }
+        }
+#if 0
+        update_osd_marks(); 				//  show yuv422 pic
+        //update_osg_marks(); 				//  show osg
+#endif
+
+        usleep(100*1000);
+
+    }
+}
+
+
+
+static pthread_t osd_capture_id = 0;
+
+//刷新时间 更新标题使用
+int video_osd_server_start()
+{
+    pthread_attr_t attr;
+    int ret ;
+    /* Record Thread */
+    if (osd_capture_id == (pthread_t)NULL)
+    {
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);  //分离的线程
+        ret = pthread_create(&osd_capture_id, &attr, &osd_capture_thread, NULL);
+        pthread_attr_destroy(&attr);
+    }
+    else
+    {
+        info("video_capture_thread is already runing..... \n");
+    }
+
+    //
+
+    return 0;
+}
+/******rgb 转yuv*******/
+/*图片的处理*/
+static void RGB_To_YUV(const RGBQUAD * rgb, osd_clut_t *yuv)
+{
+    yuv->y = (unsigned char)(0.257f * rgb->rgbRed + 0.504f * rgb->rgbGreen + 0.098f * rgb->rgbBlue + 16);
+    yuv->u = (unsigned char)(0.439f * rgb->rgbBlue - 0.291f * rgb->rgbGreen - 0.148f * rgb->rgbRed + 128);
+    yuv->v = (unsigned char)(0.439f * rgb->rgbRed - 0.368f * rgb->rgbGreen - 0.071f * rgb->rgbBlue + 128);
+    // yuv->alpha = 255;
+
+    if( rgb->rgbRed==255 && rgb->rgbGreen==255 && rgb->rgbBlue==255)      // 示例bmp中背景为白色
+    {
+        yuv->alpha = 0;   //  全透明
+    }
+    else
+    {
+        yuv->alpha = 255;
+    }
+}
+
+int max(int x,int y)
+{
+    if(x>y)return x;
+    return y;
+}
+int min(int x,int y)
+{
+    if(x>y)return y;
+    return x;
+}
+
+void BMP2RGB(unsigned char *src,unsigned char *dst,int size)
+{
+    unsigned char r,g,b;
+    int i;
+    for(i=0; i<size; i++)
+    {
+        b = *src++;
+        g = *src++;
+        r = *src++;
+        *(dst++) = r;
+        *(dst++) = g;
+        *(dst++) = b;
+    }
+}
+void RGBtoYUV422(char* SrcBuf,char* DestBuf,int DataWidth,int DataHeight)
+{
+    int   i,j,R,G,B,Y,U,V;
+    int Run1,Run2;
+
+    Run1=Run2=0;
+    for(j=0; j<DataHeight; j++)
+        for(i=0; i<DataWidth; i++)
+        {
+            R=SrcBuf[Run1+0];
+            G=SrcBuf[Run1+1];
+            B=SrcBuf[Run1+2];
+            Y = (( 77 * R + 150 * G + 29 * B) >> 8);
+            U = ((-43 * R - 85 * G + 128 * B) >> 8) + 128;
+            V = ((128 * R - 107 * G - 21 * B) >> 8) + 128;
+            DestBuf[Run2+0]=(unsigned char)max(0,min(255,Y));
+            if(i&0x01)
+                DestBuf[Run2+1]=(unsigned char)max(0,min(255,V));
+            else
+                DestBuf[Run2+1]=(unsigned char)max(0,min(255,U));
+            Run1+=3;
+            Run2+=2;
+        }
+}
+
+void update_osd_marks(void)
+{
+    int mark_idx;
+    int ret;
+    gm_osd_mark_img_table_t osd_mark_img;
+    gm_osd_mark_t osd_mark;
+    FILE *logo_file;
+    static char *logo_img_buf,*logo_img_buf2,*logo_img_buf3;
+
+    logo_img_buf = (char *)malloc((LOGO_WIDTH * LOGO_HEIGHT * 2));
+    //logo_img_buf2 = (char *)malloc((LOGO_WIDTH * LOGO_HEIGHT * 2));
+    //logo_img_buf3 = (char *)malloc((LOGO_WIDTH * LOGO_HEIGHT * 2));
+    if (logo_img_buf == NULL)
+    {
+        perror("Error to allocate logo buf.\n");
+        return;
+    }
+
+    logo_file = fopen(LOGO_YUV422_PATTERNS, "rb");
+    if (!logo_file)
+    {
+        printf("Error to open logo file %s!", LOGO_YUV422_PATTERNS);
+        free(logo_img_buf);
+        return;
+    }
+
+    //("jensen 111111111111111111111111\n");
+    fread(logo_img_buf, (LOGO_WIDTH * LOGO_HEIGHT * 2), 1, logo_file);
+    //warning("jensen 22222222222222222222222222\n");
+    //BMP2RGB((unsigned char*)logo_img_buf,(unsigned char*)logo_img_buf2,LOGO_WIDTH*LOGO_HEIGHT);
+    //warning("jensen 3333333333333333333333333333\n");
+    //RGBtoYUV422(logo_img_buf2,logo_img_buf3,LOGO_WIDTH,LOGO_HEIGHT);
+    //warning("jensen 4444444444444444444444444444\n");
+
+    memset(&osd_mark_img, 0, sizeof(gm_osd_mark_img_table_t));
+    mark_idx = 0; //idx value from 0 ~ GM_MAX_OSD_MARK_IMG_NUM
+    osd_mark_img.mark_img[mark_idx].mark_exist = 1;
+    osd_mark_img.mark_img[mark_idx].mark_yuv_buf = (char *)logo_img_buf;
+    osd_mark_img.mark_img[mark_idx].mark_width = GM_OSD_MARK_DIM_64;
+    osd_mark_img.mark_img[mark_idx].mark_height = GM_OSD_MARK_DIM_64;
+    osd_mark_img.mark_img[mark_idx].mark_yuv_buf_len = (LOGO_WIDTH * LOGO_HEIGHT * 2);
+
+    ret = gm_set_osd_mark_image(&osd_mark_img);
+    if (ret < 0)
+    {
+        printf("Error to set OSD mark image.\n");
+        free(logo_img_buf);
+        free(logo_img_buf2);
+        free(logo_img_buf3);
+        return;
+    }
+
+    osd_mark.enabled = 1;
+    osd_mark.mark_idx = mark_idx;
+    osd_mark.x = 0;
+    osd_mark.y = 120;
+    osd_mark.alpha = GM_OSD_MARK_ALPHA_75;
+    osd_mark.zoom = GM_OSD_MARK_ZOOM_2X;
+    osd_mark.align_type = GM_OSD_ALIGN_TOP_LEFT;
+    gm_set_osd_mark(g_av_info.video_info[0].capture_object, &osd_mark);//set OSD attribute(设置OSD属性)
+    if (logo_img_buf)
+        free(logo_img_buf);
+    if (logo_img_buf2)
+        free(logo_img_buf2);
+
+    if (logo_img_buf3)
+        free(logo_img_buf3);
+
+    fclose(logo_file);
+}
+
+//osg只能显示rgb
+void update_osg_marks(void)
+{
+    int mark_idx;
+    int ret;
+    gm_osd_mark_img_table_t osd_mark_img;
+    gm_osd_mark_t osd_mark;
+    FILE *logo_file;
+    static char *logo_img_buf;
+
+    logo_img_buf = (char *)malloc((OSG_LOGO_WIDTH * OSG_LOGO_HEIGHT * 2));
+    if (logo_img_buf == NULL)
+    {
+        perror("Error to allocate logo buf.\n");
+        return;
+    }
+
+    logo_file = fopen(OSG_LOGO_RGB1555_PATTERNS, "rb");
+    if (!logo_file)
+    {
+        printf("Error to open logo file %s!", OSG_LOGO_RGB1555_PATTERNS);
+        free(logo_img_buf);
+        return;
+    }
+
+    fread(logo_img_buf, (OSG_LOGO_WIDTH * OSG_LOGO_HEIGHT * 2), 1, logo_file);
+
+    memset(&osd_mark_img, 0, sizeof(gm_osd_mark_img_table_t));
+    mark_idx = 4; //idx value from 0 ~ GM_MAX_OSD_MARK_IMG_NUM
+    osd_mark_img.mark_img[0].mark_exist = 1;
+    osd_mark_img.mark_img[0].mark_yuv_buf = (char *)logo_img_buf;
+    osd_mark_img.mark_img[0].mark_width = OSG_LOGO_WIDTH;
+    osd_mark_img.mark_img[0].mark_height = OSG_LOGO_HEIGHT;
+    osd_mark_img.mark_img[0].mark_yuv_buf_len = (OSG_LOGO_WIDTH * OSG_LOGO_HEIGHT * 2);
+    osd_mark_img.mark_img[0].osg_mark_idx = 4;
+
+
+
+    ret = gm_set_osd_mark_image(&osd_mark_img);
+    if (ret < 0)
+    {
+        printf("Error to set OSD mark image.\n");
+        free(logo_img_buf);
+        return;
+    }
+
+    osd_mark.enabled = 1;
+    osd_mark.mark_idx = mark_idx;
+    osd_mark.x = 1000;
+    osd_mark.y = 20;
+    osd_mark.alpha = GM_OSD_MARK_ALPHA_75;
+    osd_mark.zoom = GM_OSD_MARK_ZOOM_1X;
+    osd_mark.align_type = GM_OSD_ALIGN_TOP_LEFT;
+    osd_mark.osg_mark_idx = 4;
+    gm_set_osd_mark(pvideo_info->capture_object, &osd_mark);//set OSD attribute(设置OSD属性)
+    //if (logo_img_buf)
+    //    free(logo_img_buf);
+
+    fclose(logo_file);
+}
+
+
+int video_osd_server_stop()
+{
+    return 0;
+}
+
+/*********************/
+//感兴趣区域设置
+int video_set_roi_attr(int ch,sdk_roi_cfg_t *roi_cfg )
+{
+
+    if(!roi_cfg)
+    {
+        return -1;
+    }
+    if( (roi_cfg->roiRect[0].x + roi_cfg->roiRect[0].width) > g_grain_system.cap[0].dim.width
+            ||( roi_cfg->roiRect[0].y + roi_cfg->roiRect[0].height )>  g_grain_system.cap[0].dim.height)
+    {
+        error("param error!!! \n");
+        return -1;
+    }
+    void *video_object = get_video_object(0, 0);
+    DECLARE_ATTR(h264e_roi_attr, gm_enc_roi_attr_t);
+    h264e_roi_attr.enabled = roi_cfg->enable;
+    h264e_roi_attr.rect.x = roi_cfg->roiRect[0].x;
+    h264e_roi_attr.rect.y = roi_cfg->roiRect[0].x;
+    h264e_roi_attr.rect.width = roi_cfg->roiRect[0].width;
+    h264e_roi_attr.rect.height = roi_cfg->roiRect[0].height;
+    gm_set_attr(video_object, &h264e_roi_attr);//set roi attribute(设置ROI属性)
+    if(gm_apply(g_av_info.video_groupfd) < 0)
+    {
+        error("gm_apply error \n");
+        return -1;
+    }
+    return 0;
+}
+
+int video_set_3di_attr(int ch, sdk_3di_cfg_t *p3di_cfg )
+{
+    if(!p3di_cfg)
+    {
+        return -1;
+    }
+    DECLARE_ATTR(cap_3di_attr, gm_3di_attr_t);
+    void *video_object = get_video_object(0, 0);
+
+    /*** set 3di attribute to capture */
+    cap_3di_attr.deinterlace = (p3di_cfg->deinterlace == 1)? 1:2; // 1 enable (开启), 2 disable(关闭)
+    cap_3di_attr.denoise = (p3di_cfg->denoise== 1 )? 1:2; // 1 enable (开启), 2 disable(关闭)
+    gm_set_attr(video_object, &cap_3di_attr); //set 3DI attribute(设置3DI属性)
+    if (gm_apply(g_av_info.video_groupfd) < 0)   // active setting (使生效)
+    {
+        error("Error! gm_apply fail, AP procedure something wrong!");
+        return -1;
+    }
+    return 0;
+
+}
+
+/*********************/
+//抓拍功能
+//这里只是提供接口
+#if 0
+SendstreamCallback	mSnapCallback = NULL;
+static sdk_snap_pic_t g_snap_attr;
+static int g_snap_fd = -1;
+
+
+#define MAX_SNAPHSOT_LEN    (128*1024)
+static char  snapshot_buf[MAX_SNAPHSOT_LEN] = { 0 };
+
+int _snap_init(int ch,SendstreamCallback snap_callback)
+{
+    if(snap_callback)
+        mSnapCallback = snap_callback;
+
+    g_snap_fd = get_video_bind_handle(0,0);
+    //warning("g_snap_fd  %d \n",g_snap_fd);
+    return 0;
+}
+int _snap_unint(int ch)
+{
+    g_snap_fd = -1;
+    mSnapCallback = NULL;
+    return 0;
+}
+
+//默认通道就是0
+int _set_snap_attr(int ch,sdk_snap_pic_t *snap_attr)
+{
+    if(snap_attr)
+        memcpy(&g_snap_attr,snap_attr,sizeof(sdk_snap_pic_t));
+    return 0;
+}
+
+//在8138s中这一个函数就可以搞定了
+//void *video_snap_thread(void *arg)
+int _snap_process(sdk_snap_info_t *snap_info)
+{
+    static int filecount = 0;
+    FILE    *snapshot_fd = NULL;
+
+    int     snapshot_len = 0;
+    char    filename[40];
+    snapshot_t snapshot;
+
+    if(g_snap_fd < 0 ||!snap_info|| snap_info->data)
+    {
+        error(" snap_process  param error \n");
+        return -1;
+    }
+    snapshot.bindfd = g_snap_fd;
+    snapshot.image_quality = 30;//g_snap_attr.quilty;  // The value of image quality from 1(worst) ~ 100(best)
+
+    snapshot.bs_buf = snapshot_buf;//snap_info->data;
+    snapshot.bs_buf_len = MAX_SNAPHSOT_LEN;//snap_info->max_len;
+
+    snapshot.bs_width = 176;//g_snap_attr.width   如何计算
+    snapshot.bs_height = 144;//g_snap_attr.height
+
+    snapshot_len = gm_request_snapshot(&snapshot, 500); // Timeout value 500ms
+    warning("-------------->g_snap_fd [%d]      snapshot_len [%d] \n",g_snap_fd,snapshot_len);
+    if (snapshot_len > 0)
+    {
+        snap_info->data_len	 = snapshot_len;
+
+        sprintf(filename, "/mnt/mtd/snap/snapshot_%d.jpg", filecount++);
+        printf("Get %s size %d bytes\n", filename, snapshot_len);
+        snapshot_fd = fopen(filename, "wb");
+        if (snapshot_fd == NULL)
+        {
+            printf("Fail to open file %s\n", filename);
+            exit(1);
+        }
+        fwrite(snapshot_buf, 1, snapshot_len, snapshot_fd);
+        fclose(snapshot_fd);
+        return 0;
+    }
+    else
+    {
+        error("snapshot_len :%d  \n",snapshot_len);
+    }
+    return -1;
+}
+
+
+#if 0
+//抓拍消耗时间 创建线程解决
+int _snap_process(int ch,int snap_type,int snap_num)
+{
+
+    pthread_attr_t attr;
+    int ret ;
+    init_write_fd();
+
+    video_capture_start();
+    /* Record Thread */
+    if (video_capture_id == (pthread_t)NULL)
+    {
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);  //分离的线程
+        ret = pthread_create(&video_capture_id, &attr, &video_capture_thread, NULL);
+        pthread_attr_destroy(&attr);
+    }
+    else
+    {
+        info("video_capture_thread is already runing..... \n");
+    }
+
+    return 0;
+}
+#endif
+#endif
+int video_snap_init(int ch,SendstreamCallback snap_callback)
+{
+    _snap_init(ch,snap_callback);
+#if 0
+    char buf[1024*128];
+    memset(buf,0,sizeof(buf));
+    sdk_snap_info_t *snap_info = (sdk_snap_info_t *)buf;
+    memset(snap_info,0,sizeof(sdk_snap_info_t));
+
+    //test
+    char path[40];
+    memcpy(path,"/mnt/nfs/",40);
+    //end
+    video_snap_process(0,snap_info,path);
+#endif
+    return 0;
+}
+int video_snap_unint(int ch)
+{
+    _snap_unint( ch);
+    return 0;
+}
+//在8138s中这一个函数就可以搞定了 应该枷锁防止多个同时调用
+int video_snap_process(int ch,sdk_snap_info_t *snap_info,char *path)
+{
+    _snap_process(snap_info,path);
+    return 0;
+}
+
+int av_mirror_param(int ch,sdk_mirror_flip_cfg_t *mirror_cfg)
+{
+    int mirror, flip;
+    char mirror_cmd[128];
+    char flip_cmd[128];
+
+    mirror = mirror_cfg->mirror;
+    flip = mirror_cfg->flip;
+    warning("mirror value [%d]  flip value[%d]\n",mirror, flip);
+    sprintf(mirror_cmd,"echo w mirror %d > /proc/isp328/command",mirror);
+    sprintf(flip_cmd,"echo w flip %d > /proc/isp328/command",flip);
+
+    system(mirror_cmd);
+    system(flip_cmd);
+
+
+}
+/*************************************************/
+//临时增加
+typedef enum
+{
+    GRD_COLOR_MODE_AUTO = 0,    // Color Mode: Auto, detected by light sensor
+    GRD_COLOR_MODE_DAY,         // Color Mode: Day - Chromatic, bInfraredLed = 0, bInfraredCut = 1, nSaturation > 0
+    GRD_COLOR_MODE_NIGHT,       // Color Mode: Night - Monochrome, bInfraredLed = 1, bInfraredCut = 0, nSaturation = 0
+    //  GRD_COLOR_MODE_SCHEDULE_ON_TIMER,   //Color Mode: time Schedule  current mode.
+} GRD_COLOR_MODE_E;
+
+
+int color_isp_reload_apply(int  color_mode)
+{
+    char filename[60];
+    memset(filename,0,sizeof(filename));
+    if (0 == color_mode)
+    {
+        sprintf(filename, "/mnt/mtd/isp328_ov9715_DAY.cfg");
+    }
+    else if (1 == color_mode)
+    {
+        sprintf(filename, "/mnt/mtd/isp328_ov9715_NIGHT.cfg");
+    }
+    else if (2 == color_mode)
+    {
+        sprintf(filename, "/mnt/mtd/isp328_ov9715_DAYLOW.cfg");
+    }
+    else if (3 == color_mode)
+    {
+        sprintf(filename, "/mnt/mtd/isp328_ov9715_NIGHT.cfg");
+    }
+    int ret;
+    ret = isp320_reloadCfg_control( filename);
+}
+/*
+int  color_scene_num   0: 室外白天  1:室外黑夜  2:室内白天 3:室内黑夜
+*/
+int grd_color_Dynamic_mode_apply(GRD_COLOR_MODE_E enColorMode, int color_scene_num)
+{
+    //grd_color_set_powerfreq(pstColorScheme->stColorCfg.nPowerFreq);
+
+    /* Night -> Day, set IR-Cut before ISP configuration */
+
+    if (enColorMode == GRD_COLOR_MODE_NIGHT ) //夜晚  降帧
+    {
+        Set_DayNight_mode(1);
+        grd_color_set_SenFps(10);
+
+    }
+    else  // 白天
+    {
+        Set_DayNight_mode(0);
+        grd_color_set_saturation(GRD_DEF_INDOORS_DAY_OV9710_COLOR_SATURATION);
+
+        grd_color_set_SenFps(25);
+    }
+
+    if(color_scene_num == 0)
+    {
+
+        grd_color_set_hue(pstColorScheme->stColorCfg.nHue);
+        //  grd_color_set_saturation(pstColorScheme->stColorCfg.nSaturation);
+        grd_color_set_contrast(pstColorScheme->stColorCfg.nContrast);
+        grd_color_set_brightness(pstColorScheme->stColorCfg.nBrightness);
+        grd_color_set_denoise(pstColorScheme->stColorCfg.nDenoise);
+        grd_color_set_sharpness(pstColorScheme->stColorCfg.nSharpness);
+        grd_color_set_mirror(pstColorScheme->stColorCfg.nMirror);
+        grd_color_set_gama(pstColorScheme->stColorCfg.nGama);
+
+
+        grd_color_set_AEEnabled(pstColorScheme->stColorCfg.nAEEnabled);
+        grd_color_set_AETargetY(pstColorScheme->stColorCfg.nAETargetY);
+        grd_color_set_AEConvergeSpeed(pstColorScheme->stColorCfg.nAEConvergeSpeed);
+        grd_color_set_AEMaxExpTime(pstColorScheme->stColorCfg.nAEMaxExpTime);
+        grd_color_set_AEMinExpTime(pstColorScheme->stColorCfg.nAEMinExpTime);
+        grd_color_set_AEMaxGain(pstColorScheme->stColorCfg.nAEMaxGain);
+        grd_color_set_AEMinGain(pstColorScheme->stColorCfg.nAEMinGain);
+    }
+    else  if(color_scene_num == 1)
+        {
+
+            grd_color_set_hue(pstColorScheme->stColorCfg.nHue);
+            //  grd_color_set_saturation(pstColorScheme->stColorCfg.nSaturation);
+            grd_color_set_contrast(pstColorScheme->stColorCfg.nContrast);
+            grd_color_set_brightness(pstColorScheme->stColorCfg.nBrightness);
+            grd_color_set_denoise(pstColorScheme->stColorCfg.nDenoise);
+            grd_color_set_sharpness(pstColorScheme->stColorCfg.nSharpness);
+            grd_color_set_mirror(pstColorScheme->stColorCfg.nMirror);
+            grd_color_set_gama(pstColorScheme->stColorCfg.nGama);
+
+
+            grd_color_set_AEEnabled(pstColorScheme->stColorCfg.nAEEnabled);
+            grd_color_set_AETargetY(pstColorScheme->stColorCfg.nAETargetY);
+            grd_color_set_AEConvergeSpeed(pstColorScheme->stColorCfg.nAEConvergeSpeed);
+            grd_color_set_AEMaxExpTime(pstColorScheme->stColorCfg.nAEMaxExpTime);
+            grd_color_set_AEMinExpTime(pstColorScheme->stColorCfg.nAEMinExpTime);
+            grd_color_set_AEMaxGain(pstColorScheme->stColorCfg.nAEMaxGain);
+            grd_color_set_AEMinGain(pstColorScheme->stColorCfg.nAEMinGain);
+    }
+    else  if(color_scene_num == 2)
+        {
+
+            grd_color_set_hue(pstColorScheme->stColorCfg.nHue);
+            //  grd_color_set_saturation(pstColorScheme->stColorCfg.nSaturation);
+            grd_color_set_contrast(pstColorScheme->stColorCfg.nContrast);
+            grd_color_set_brightness(pstColorScheme->stColorCfg.nBrightness);
+            grd_color_set_denoise(pstColorScheme->stColorCfg.nDenoise);
+            grd_color_set_sharpness(pstColorScheme->stColorCfg.nSharpness);
+            grd_color_set_mirror(pstColorScheme->stColorCfg.nMirror);
+            grd_color_set_gama(pstColorScheme->stColorCfg.nGama);
+
+
+            grd_color_set_AEEnabled(pstColorScheme->stColorCfg.nAEEnabled);
+            grd_color_set_AETargetY(pstColorScheme->stColorCfg.nAETargetY);
+            grd_color_set_AEConvergeSpeed(pstColorScheme->stColorCfg.nAEConvergeSpeed);
+            grd_color_set_AEMaxExpTime(pstColorScheme->stColorCfg.nAEMaxExpTime);
+            grd_color_set_AEMinExpTime(pstColorScheme->stColorCfg.nAEMinExpTime);
+            grd_color_set_AEMaxGain(pstColorScheme->stColorCfg.nAEMaxGain);
+            grd_color_set_AEMinGain(pstColorScheme->stColorCfg.nAEMinGain);
+        }
+    else  if(color_scene_num == 3)
+        {
+
+            grd_color_set_hue(pstColorScheme->stColorCfg.nHue);
+            //  grd_color_set_saturation(pstColorScheme->stColorCfg.nSaturation);
+            grd_color_set_contrast(pstColorScheme->stColorCfg.nContrast);
+            grd_color_set_brightness(pstColorScheme->stColorCfg.nBrightness);
+            grd_color_set_denoise(pstColorScheme->stColorCfg.nDenoise);
+            grd_color_set_sharpness(pstColorScheme->stColorCfg.nSharpness);
+            grd_color_set_mirror(pstColorScheme->stColorCfg.nMirror);
+            grd_color_set_gama(pstColorScheme->stColorCfg.nGama);
+
+
+            grd_color_set_AEEnabled(pstColorScheme->stColorCfg.nAEEnabled);
+            grd_color_set_AETargetY(pstColorScheme->stColorCfg.nAETargetY);
+            grd_color_set_AEConvergeSpeed(pstColorScheme->stColorCfg.nAEConvergeSpeed);
+            grd_color_set_AEMaxExpTime(pstColorScheme->stColorCfg.nAEMaxExpTime);
+            grd_color_set_AEMinExpTime(pstColorScheme->stColorCfg.nAEMinExpTime);
+            grd_color_set_AEMaxGain(pstColorScheme->stColorCfg.nAEMaxGain);
+            grd_color_set_AEMinGain(pstColorScheme->stColorCfg.nAEMinGain);
+        }
+    return 0;
+}
+
+
+int g_exit = 0;
+
+static void *icut_thread(void *arg)
+{
+    char buf_saturation[100];
+    int vals1 ,vals2;
+    int mode = 1;
+    int old_mode = 2;
+    int gpio_ir_cut28 = 32+28;
+    int gpio_ir_cut29 = 32+29;
+    gpioEx_defpin(gpio_ir_cut28, 1);  //set output
+    gpioEx_defpin(gpio_ir_cut29, 1);  //set output
+    while(!g_exit)
+    {
+        if (get_light_sensor_value())
+        {
+            mode = 1;
+        }
+        else
+        {
+            mode = 0;
+        }
+
+        if(mode == 0)
+        {
+            if(old_mode != mode)
+            {
+                gpioEx_set(gpio_ir_cut28);
+                gpioEx_clear(gpio_ir_cut29);
+
+                vals1 = gpioEx_read(gpio_ir_cut28);
+                vals2 = gpioEx_read(gpio_ir_cut29);
+                warning("----------->night mode vals 28pin  ->  [%d]\n",vals1);
+                warning("----------->night mode vals 29pin  ->  [%d]\n",vals2);
+                usleep(300*1000);
+
+                gpioEx_clear(gpio_ir_cut28);
+                vals1 = gpioEx_read(gpio_ir_cut28);
+                vals2 = gpioEx_read(gpio_ir_cut29);
+                warning("----------->night mode vals 28pin  ->  [%d]\n",vals1);
+                warning("----------->night mode vals 29pin  ->  [%d]\n",vals2);
+
+                int ch = 0;
+                sdk_image_attr_t attr_cfg;
+                attr_cfg.saturation = 0;
+                attr_cfg.icut_flag= 1;
+                sdk_av_set_attr_param(ch, &attr_cfg);
+
+                color_isp_reload_apply(1);
+                grd_color_Dynamic_mode_apply(enCurColorMode, &p_grd_color_scheme_cfg->stColorScheme[color_scene_num]);
+
+                old_mode = 0;
+            }
+        }
+        else if(mode == 1)
+        {
+            if(old_mode != mode)
+            {
+                gpioEx_set(gpio_ir_cut29);
+                gpioEx_clear(gpio_ir_cut28);
+                vals1 = gpioEx_read(gpio_ir_cut28);
+                vals2 = gpioEx_read(gpio_ir_cut29);
+
+                warning("----------->day mode vals 28pin  ->  [%d]\n",vals1);
+                warning("----------->day mode vals 29pin  ->  [%d]\n",vals2);
+                usleep(300*1000);
+                gpioEx_clear(gpio_ir_cut29);
+
+                vals1 = gpioEx_read(gpio_ir_cut28);
+                vals2 = gpioEx_read(gpio_ir_cut29);
+                warning("----------->day mode vals 28pin  ->  [%d]\n",vals1);
+                warning("----------->day mode vals 29pin  ->  [%d]\n",vals2);
+
+                int ch = 0;
+                sdk_image_attr_t attr_cfg;
+                attr_cfg.saturation = 128;
+                attr_cfg.icut_flag= 1;
+                sdk_av_set_attr_param(ch, &attr_cfg);
+
+                color_isp_reload_apply(2);
+                grd_color_Dynamic_mode_apply(enCurColorMode, int  color_scene_num);
+
+                old_mode = 1;
+            }
+        }
+        usleep(200*1000);
+    }
+}
+
+
+
+static pthread_t icut_capture_id = 0;
+int I_CUT_MONITER()
+{
+    pthread_attr_t icut;
+    int ret ;
+
+    if (icut_capture_id == (pthread_t)NULL)
+    {
+        pthread_attr_init(&icut);
+        pthread_attr_setdetachstate(&icut, PTHREAD_CREATE_DETACHED);  //分离的线程
+        ret = pthread_create(&icut_capture_id, &icut, &icut_thread, NULL);
+        pthread_attr_destroy(&icut);
+    }
+    else
+    {
+        info("Test icut_thread is already runing..... \n");
+    }
+
+}
+
+int video_set_attr_param(int ch, sdk_image_attr_t* attr_cfg)
+{
+    char buf_brightness[128];
+    char buf_hue[128];
+    char buf_contrast[128];
+    char buf_saturation[128];
+    char buf_sharpness[128];
+    if(attr_cfg->icut_flag== 0)
+    {
+        sprintf(buf_brightness,"echo w brightness %d > /proc/isp328/command",attr_cfg->brightness);
+        sprintf(buf_contrast,"echo w contrast %d > /proc/isp328/command",attr_cfg->contrast);
+        sprintf(buf_hue,"echo w hue %d > /proc/isp328/command",attr_cfg->hue);
+        sprintf(buf_saturation,"echo w saturation %d > /proc/isp328/command",attr_cfg->saturation);
+        sprintf(buf_sharpness,"echo w sharpness %d > /proc/isp328/command",attr_cfg->sharpness);
+        system(buf_brightness);
+        system(buf_contrast);
+        system(buf_hue);
+        system(buf_saturation);
+        system(buf_sharpness);
+    }
+    else if(attr_cfg->icut_flag == 1)
+    {
+        sprintf(buf_saturation,"echo w saturation %d > /proc/isp328/command",attr_cfg->saturation);
+        system(buf_saturation);
+    }
+    sleep(1);
+    return 0;
+}
+
+//

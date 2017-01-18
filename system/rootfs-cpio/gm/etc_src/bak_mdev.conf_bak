@@ -1,0 +1,2 @@
+sd.* 0:0 666 */gm/bin/sd_automount.sh $MDEV
+mmc.* 0:0 666 */gm/bin/sd_automount.sh $MDEV

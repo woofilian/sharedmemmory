@@ -1,0 +1,18 @@
+
+
+=====================
+Version: 00.00.008
+Author: Wang Chonghua
+Date: 20161201
+=====================
+1. rm cfg80211 module from filesystem and built it to kernel
+2. reconfig mtd partion for kernel and filesystem
+3. remove some unused webs
+
+=====================
+Version: 00.00.008
+Author: Wang Chonghua
+Date: 20161130
+=====================
+1. add 8188 wifi module and cfg80211 module
+2. add goahead for upgrade firmware by url

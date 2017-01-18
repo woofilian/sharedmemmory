@@ -1,0 +1,32 @@
+#!/bin/sh
+
+#export PATH=/gm/tools:/bin:/sbin:/usr/bin:/usr/sbin:$PATH
+
+# mount root filesystem in read-write mode
+/bin/echo "Mounting root fs rw ..."
+/bin/mount -n -o remount,rw /
+
+# mount all other filesystems
+/bin/echo "Mounting other filesystems ..."
+/bin/mount -a
+
+/bin/echo "Setting hostname ..."
+/bin/hostname JOOAN-VR
+
+/bin/echo "Bringing up interfaces ..."
+ifup -a
+
+echo "------------Starting mdev........"
+/bin/echo /sbin/mdev > /proc/sys/kernel/hotplug
+
+/gm/bin/busybox mdev -s
+/gm/bin/busybox --install -s
+
+# mount /mnt/mtd
+/bin/echo "Mounting user's MTD partion"
+
+/bin/mount -t jffs2 /dev/mtdblock3 /config
+/bin/mount -t jffs2 /dev/mtdblock4 /mnt/mtd
+
+/bin/echo "boot.sh ..."
+sh boot.sh

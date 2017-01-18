@@ -1,0 +1,46 @@
+#! /bin/sh
+
+# set env
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/mnt/mtd/run/";
+
+
+# record
+#mkdir /var/run/
+#mkdir /tmp/record
+
+# config network
+ifconfig lo up
+ifconfig eth0 172.16.1.18 netmask 255.255.255.0 up
+wan_udhcpc.sh eth0
+telnetd &
+
+
+#-------------- start app ------------------#
+# should choose the suited sensor type here according to different camera
+cd /mnt/mtd/
+video_frontend=sc1135
+sh vg_boot.sh $video_frontend
+sleep 3
+
+#exit
+
+# auto mount mmc
+mmc_check.sh &
+/mnt/mtd/tz.sh &
+/mnt/mtd/run/rtl_station_run.sh &
+
+echo 1 > /proc/sys/vm/drop_caches
+if [ -e /gm/bin/GoAhead ] ; then
+	GoAhead &
+	extract_webs.sh &
+	echo " GoAhead run ok ======";
+fi
+
+if [ -e /mnt/mtd/run/Mainengine ] ; then
+	cd /mnt/mtd/run/
+	./Mainengine &
+	echo " Mainengine run ok ======";
+fi
+
+
+

@@ -1,0 +1,864 @@
+
+/*     body    */
+
+
+body {
+	width:100%;
+	height:100%;
+	margin:0;
+	-webkit-text-size-adjust:none;
+}
+
+
+
+
+/*            @End            */
+
+
+
+/*  background pinstripes image    */
+
+#jqt > * {
+	max-width:100%;
+	height:auto;
+    background: url(img/pinstripes.png);
+	background-repeat: repeat;
+}
+
+/*      @End   */
+
+
+/* @group Toolbar */
+
+#jqt .toolbar{
+	font-weight: bold;
+	text-align:center;
+	font-size:18px;
+	color:#FFFFFF;
+    -webkit-box-sizing: border-box;
+    border-bottom: 1px solid #2d3642;
+    padding: 10px;
+	background-color:#748aa7;
+    position: relative;
+}
+
+/* @end */
+
+
+
+
+
+/* @group Lists */
+
+#jqt ul {
+    color: black;
+    background: #fff;
+    border: 1px solid #B4B4B4;
+    font: bold 17px "Helvetica Neue", Helvetica;
+    padding: 0;
+    margin: 15px 10px 17px 10px;
+    -webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+	border-radius: 8px;
+	behavior: url(/apcam/for-iphone/apple/htc/PIE.htc);
+}
+
+#jqt ul li {
+    color: #666;
+    border-top: 1px solid #B4B4B4;
+    list-style-type: none;
+    padding: 10px 10px 10px 10px;
+}
+
+
+/*       @End     */
+
+
+
+
+/* universal links on list */
+
+#jqt ul li a, #jqt li.img a + a {
+    color: #000;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    display: block;
+    padding: 12px 10px 12px 10px;
+    margin: -10px;
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+
+#jqt ul li a.active {
+	TEXT-DECORATION:none;
+	cursor:hand;
+    background-color: #194fdb;
+    color: #fff;
+}
+
+/*
+@end */
+
+
+
+/*------------------           one button        ------------------*/
+
+/* @group Individual */
+#jqt ul.individual {
+    border: 0;
+    background: none;
+    clear: both;
+    overflow: hidden;
+}
+
+#jqt ul.individual li {
+	font-size:18px;
+    background: #ffffff;
+    border: 1px solid rgb(180,180,180);
+    text-align: center;
+    -webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+    -webkit-box-sizing: border-box;
+    float: center;
+    display: block;
+    padding: 11px 10px 14px 10px;	/*  Control button style */
+	border-radius: 8px;
+	behavior: url(/apcam/for-iphone/apple/htc/PIE.htc);
+}
+
+#jqt ul.individual li a {
+    color:#333333;
+    line-height: 16px;
+    margin: -11px -10px -14px -10px;
+    padding: 11px 10px 14px 10px;
+    -webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+	border-radius: 8px;/*Round*/
+	behavior: url(/apcam/for-iphone/apple/htc/PIE.htc);
+}
+
+
+#jqt ul.individual li a:hover {
+	TEXT-DECORATION:none;
+	cursor:hand;
+    color: #333333;
+    background: #FFFFFF;     /*          The mouse on the change of the button       */
+}
+
+
+/*------------------------------   @end ----------------------*/
+
+
+
+
+
+
+
+/*------------------           two button        ------------------*/
+
+/* @group link */
+
+#jqt ul.link {
+    border: 0;
+    background: none;
+    clear: both;
+    overflow: hidden;
+}
+
+#jqt ul.link li {
+	font-size:16px;
+    background: white;
+    border: 1px solid rgb(180,180,180);
+    text-align: center;
+    -webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+    -webkit-box-sizing: border-box;
+    width: 48%;
+    float: left;
+    display: block;
+    padding: 11px 10px 14px 10px;
+	border-radius: 8px;
+	behavior: url(/apcam/for-iphone/apple/htc/PIE.htc);
+}
+
+#jqt ul.link li + li {
+    float: right;
+}
+
+#jqt ul.link li a {
+    color:#333333;
+    line-height: 16px;
+    margin: -11px -10px -14px -10px;
+    padding: 11px 1px 14px 1px;
+    -webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+	border-radius: 8px;
+	behavior: url(/apcam/for-iphone/apple/htc/PIE.htc);
+}
+
+#jqt ul.link li a:hover {
+	TEXT-DECORATION:none;
+	cursor:hand;
+    color: #333333;
+    background: #FFFFFF;
+   
+}
+
+/*------------------------------   @end ----------------------*/
+
+
+
+
+/*------------------           two button    ( Display only a button )    ------------------*/
+
+/* @group link */
+
+#jqt ul.link_finish {
+    border: 0;
+    background: none;
+    clear: both;
+    overflow: hidden;
+}
+
+#jqt ul.link_finish li {
+	font-size:16px;
+    background: white;
+    border: 1px solid rgb(180,180,180);
+    text-align: center;
+    -webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+    -webkit-box-sizing: border-box;
+    width: 48%;
+    float: right;
+    display: block;
+    padding: 11px 10px 14px 10px;
+	border-radius: 8px;
+	behavior: url(/apcam/for-iphone/apple/htc/PIE.htc);
+}
+
+
+#jqt ul.link_finish li a {
+    color:#333333;
+    line-height: 16px;
+    margin: -11px -10px -14px -10px;
+    padding: 11px 1px 14px 1px;
+    -webkit-border-radius: 8px;
+	-moz-border-radius: 8px;
+	border-radius: 8px;
+	behavior: url(/apcam/for-iphone/apple/htc/PIE.htc);
+}
+
+#jqt ul.link_finish li a:hover {
+	TEXT-DECORATION:none;
+	cursor:hand;
+    color: #333333;
+    background: #FFFFFF;
+   
+}
+
+/*------------------------------   @end ----------------------*/
+
+
+
+
+
+
+
+
+
+/*  ------------           head font -----     */
+
+#jqt .head {
+    font-size: 16px;
+	text-align: left center;
+    text-shadow: rgba(255,255,255,.8) 0 1px 0;
+	color: rgb(76, 86, 108);
+}
+
+
+#jqt .accountinfo {
+    font-size: 16px;
+	text-align: left center;
+    text-shadow: rgba(255,255,255,.8) 0 1px 0;
+	color: rgb(76, 86, 108);
+	padding-left:10px;
+}
+
+/*  ------------ @End -------  */
+
+
+
+
+
+
+/*  all center interval    */
+
+#jqt .info {
+    font-size: 13px;
+    line-height: 16px;
+    text-align: left;
+    text-shadow: rgba(255,255,255,.8) 0 1px 0;
+    color: rgb(76, 86, 108);
+    padding: 5px 10px 5px 10px;
+}
+
+
+
+
+/*  --------------    <    login    >    center  interval   ------------------- */
+#jqt .login_info {
+    font-size: 13px;
+    line-height: 16px;
+    text-align: left;
+	height:50px;
+    text-shadow: rgba(255,255,255,.8) 0 1px 0;
+    color: rgb(76, 86, 108);
+    padding: 5px 10px 5px 10px;
+}
+
+
+#jqt .login {
+	width:90%; 
+	height:5px;
+	color:#FF0000;
+    text-align: left;
+    text-shadow: rgba(255,255,255,.8) 0 1px 0;
+    padding: 26px;
+}
+
+
+#jqt .owner_name{
+	padding-left:10px;
+	padding-right:5px;
+	border-bottom:1px solid #CAD1D9; 
+	font-weight:bold;
+	font-size:16px;
+	color:#0a0a0a;
+	height:34px;
+}
+
+#jqt .ownerName{
+	height:28px;
+	width: 100%;
+	border:0; 
+	margin-bottom:5px;
+	text-align:left;
+	color:#4d6893;
+	font-size:16px; 
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+
+#jqt .owner_password{
+	padding-left:10px;
+	padding-right:5px;
+	font-weight:bold;
+	font-size:16px;
+	color:#0a0a0a;
+	height:33px;
+}
+
+#jqt .ownerPass{
+	height:28px; 
+	width: 100%;
+	border:0; 
+	margin-top:5px; 
+	text-align:left; 
+	color:#4d6893;
+	font-size:16px; 
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+
+/*  --------------    <   CamPreview   >    center  interval   ------------------- */
+
+#jqt .preview{
+    text-align: center;
+    text-shadow: rgba(255,255,255,.8) 0 1px 0;
+    color: rgb(76, 86, 108);
+    padding: 8.6px;
+}
+
+
+
+/*  --------------    <  CreateAccount  >    center  interval  and input style ------------------- */
+
+
+#jqt .loginInput{
+	height: 25px; 
+	width: 100%;
+	border:0;
+	margin-top:2px;
+	text-align:left;
+	color:#4d6893;
+	font-size:16px;
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+#jqt .seedonk_login{
+	padding-left:10px;
+	padding-right:5px;
+	border-bottom:1px solid #CAD1D9;
+	line-height:25px;
+	font-weight:bold;
+	font-size:16px;
+	color:#0a0a0a;
+	height:31px;
+}
+
+#jqt .seedonk_passwd{
+	padding-left:10px;
+	padding-right:5px;
+	border-bottom:1px solid #CAD1D9;
+	line-height:25px;
+	font-weight:bold;
+	font-size:16px;
+	color:#0a0a0a;
+	height:31px;
+}
+
+
+#jqt .passwdInput{
+	height: 25px; 
+	width: 100%;
+	border:0; 
+	margin-top:2px; 
+	text-align:left; 
+	color:#4d6893;
+	font-size:16px;
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+
+#jqt .seedonk_repasswd{
+	padding-left:10px;
+	padding-right:5px;
+	border-bottom:1px solid #CAD1D9;
+	line-height:25px;
+	font-weight:bold;
+	font-size:16px;
+	color:#0a0a0a;
+	height:31px;
+}
+
+
+
+#jqt .repasswdInput{
+	height: 25px; 
+	width:100%;
+	border:0;
+	margin-top:2px; 
+	text-align:left; 
+	color:#4d6893;
+	font-size:16px;
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+
+#jqt .seedonk_email{
+	padding-left:10px;
+	padding-right:5px;
+	line-height:25px;
+	font-weight:bold;
+	font-size:16px;
+	color:#0a0a0a;
+	height:30px;
+}
+
+
+
+#jqt .emailInput{
+	height: 25px; 
+	width: 100%;
+	border:0; 
+	margin-top:2px; 
+	text-align:left; 
+	color:#4d6893;
+	font-size:16px;
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+
+
+
+
+/*  --------------    <  CamRegister  >    center  interval  and input style  ------------------- */
+
+
+ 
+ 
+#jqt .cameraname{
+	padding-left:10px;
+	padding-right:5px;
+	border-bottom:1px solid #CAD1D9;
+	line-height:25px;
+	font-weight:bold;
+	font-size:16px;
+	color:#101010;
+	height:32px;
+}
+
+#jqt .cameranameSingtel{
+	padding-left:10px;
+	padding-right:5px;
+	line-height:25px;
+	font-weight:bold;
+	font-size:16px;
+	color:#101010;
+	height:30px;
+}
+
+ 
+#jqt .cameranameInput{
+	height:25px; 
+	width: 100%;
+	margin-bottom:5px; 
+	border:0; 
+	margin-top:3px;
+	text-align:left;
+	color:#4d6893; 
+	font-weight: bold;
+	font-size:16px; 
+	-webkit-appearance:none;
+}
+
+
+#jqt .cameradesc{
+	padding-left:10px;
+	padding-right:5px;
+	line-height:25px;
+	font-weight:bold;
+	font-size:16px;
+	color:#101010;
+	height:30px;
+}
+
+
+#jqt .cameradescInput{
+	height:25px; 
+	width: 100%;
+	border:0; 
+	margin-top:5px; 
+	text-align:left; 
+	color:#4d6893; 
+	font-size:16px; 
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+/*       @End       */
+
+
+
+
+
+
+
+
+
+/*  --------------    <Connect to Internet>  aplist   all css style    ------------------- */
+
+/* @group Lists */
+
+#jqt .wordUpper {
+	text-shadow: rgba(255,255,255,.8) 0 1px 0;
+	color: rgb(76, 86, 108);
+	font-size:12px;
+	text-align:center;
+}
+
+
+#jqt .wordLower {
+	text-shadow: rgba(255,255,255,.8) 0 1px 0;
+	color: rgb(76, 86, 108);
+	font-size:11px;
+	text-align:center;
+}
+
+#jqt .wordLowerLeft {
+	text-shadow: rgba(255,255,255,.8) 0 1px 0;
+	color: rgb(76, 86, 108);
+	font-size:12px;
+	text-align:left;
+	padding-left:10px;
+	padding-right:10px;
+	padding-bottom:0px;
+	padding-top:5px;
+}
+
+#jqt .networkPassInput{
+	padding:5px;
+	height:25px; 
+	width:135px; 
+	border:0; 
+	-webkit-appearance:none; 
+	text-align:left; 
+	margin-left:15px; 
+	font-size:16px; 
+	font-weight: bold;
+	color:#4d6893;
+}
+
+#jqt .networkPass{
+	padding-left:10px;
+	padding-right:20px;
+	line-height:25px;
+	font-size:16px;
+	color:#0a0a0a;
+}
+
+#jqt .networkPass1{
+	padding-left:10px;
+	padding-right:20px;
+	line-height:25px;
+	font-size:16px;
+	color:#0a0a0a;
+	border-bottom:1px solid #CAD1D9;
+}
+
+
+#jqt ul .encryptSecurity {
+	padding:5px;
+	border-bottom:1px solid #CAD1D9; 
+	overflow:hidden;
+	text-align:left;
+	color:#0a0a0a;
+	font-size:16px;
+	height:25px;
+	font-weight: bold;
+    background-image: url(img/arrows.png);
+    background-position: right center;
+    background-repeat: no-repeat;
+}
+
+
+
+#jqt .headUpper {
+	background-color:#a4b2c4; 
+	height:35px; 
+	text-align:center;
+	-webkit-box-sizing:border-box;
+	padding:5px;
+	position: relative;
+	font-size:16px;
+	color:#30435f;
+	text-shadow: rgba(255,255,255,.8) 0 1px 0;
+}
+
+
+#jqt .headLower {
+	background-color:#748aa7; 
+	height:30px; 
+	text-align:center;
+	-webkit-box-sizing:border-box;
+	padding:5px;
+	position: relative;
+	font-weight: bold;
+	font-size:18px;
+	color:#ffffff;
+}
+
+
+
+#jqt .netfirst{
+	background-color:#FFFFFF; 
+	margin-left:5px; 
+	margin-right:5px;
+	margin-top:3px;
+	margin-bottom:3px;
+}
+
+
+#jqt .netinfo{
+	background-color:#FFFFFF;
+	margin-left:5px;
+	margin-right:5px;
+	margin-top:5px;
+	margin-bottom:5px;
+}
+
+
+ 
+#jqt .nameStyle{
+	height:25px;
+	padding:5px;
+	text-align:left; 
+	font-size:16px;
+	color:#0a0a0a;
+	font-weight: bold;
+}
+
+
+#jqt .nameInput{
+	font-weight: bold;
+	width:100px;
+	border:0;
+	margin-left:80px; 
+	color:#4d6893;
+	font-size:16px;
+	-webkit-appearance:none;
+}
+
+#jqt ul .encryptStyle{ 
+	padding:5px;  
+	overflow:hidden;
+	text-align:left;
+	color:#0a0a0a;
+	font-size:16px;
+	height:25px;
+    background-image: url(img/arrows.png);
+    background-position: right center;
+    background-repeat: no-repeat;
+}
+
+
+#jqt .encryptPassword{
+	border:0;
+	width:100px;
+	text-align:left;
+	margin-left:50px;
+	color:#4d6893;
+	font-size:16px;
+	font-weight: bold;
+	-webkit-appearance:none;
+}
+
+
+#jqt .security{
+	padding:5px;  
+	height:25px;
+	font-size:16px;
+	color:#0a0a0a;
+	font-weight: bold;
+}
+
+#jqt .securitybottom{
+	padding:5px; 
+	border-bottom:1px solid #CAD1D9;  
+	height:25px;
+	font-size:16px;
+	color:#0a0a0a;
+	font-weight: bold;
+}
+
+
+#jqt .securityLine{
+	padding:5px;  
+	border-bottom:1px solid #CAD1D9; 
+	height:25px;
+	font-size:16px;
+	color:#0a0a0a;
+	font-weight: bold;
+}
+
+
+#jqt .securityinfo{
+	background-color:#FFFFFF;
+	margin-left:5px;
+	margin-right:5px;
+	margin-top:3px;
+	margin-bottom:3px;
+}
+
+
+#jqt ul .otherFirst {
+	overflow:hidden;
+	padding-left:21px;
+	padding-top:5px;
+	padding-bottom:5px;
+	padding-right:0px;
+	margin-top:3px;
+	line-height:25px;
+	text-align:left;
+	color:#0a0a0a;
+	font-size:16px;
+	-webkit-box-sizing:border-box;
+    background-image: url(img/arrows.png);
+    background-position: right center;
+    background-repeat: no-repeat;
+}
+
+
+#jqt .other{
+	overflow:hidden;
+	padding-top:5px;
+	padding-bottom:3px;
+	text-align:left;
+	margin-left:5px;
+	padding-left:16px;
+	height:25px;
+	background-image: url(img/arrows.png);
+    background-position: right center;
+    background-repeat: no-repeat;
+}
+
+
+
+#jqt .centerTable{
+	white-space:nowrap;
+	text-overflow:ellipsis;
+	-o-text-overflow:ellipsis;
+	overflow:hidden;
+	padding-top:5px;
+	padding-bottom:5px;
+	text-align:left;
+	margin-left:5px;
+	border-bottom:1px solid #CAD1D9;
+	height:25px;
+}
+
+
+
+#jqt .nextRounded{
+	background-color:#FFFFFF; 
+	margin-left:6px; 
+	margin-right:6px;
+	margin-top:5px;
+	margin-bottom:5px;
+}
+
+
+
+
+#jqt .refresh{
+	CURSOR:pointer;
+	text-align: right center;
+	line-height:30px; 
+	height:30px;   
+	padding-right:15px;
+	PADDING-RIGHT: 10px; 
+	PADDING-LEFT: 10px;
+	FONT-SIZE: 16px;
+	text-shadow: rgba(255,255,255,.8) 0 1px 0;
+	color: rgb(76, 86, 108);
+	BORDER-RIGHT: #b4b4b4 1px solid; 
+	BORDER-LEFT: #b4b4b4 1px solid; 
+	BORDER-TOP: #b4b4b4 1px solid; 
+	BORDER-BOTTOM: #b4b4b4 1px solid;
+	-webkit-border-radius: 5px;
+	-moz-border-radius: 5px;
+	border-radius: 5px;
+	background-color:#FFFFFF;
+	word-wrap: break-word
+}
+
+
+
+#jqt .radio { 
+	color:#FF0000;
+    text-align: left;
+    text-shadow: rgba(255,255,255,.8) 0 1px 0;
+    padding: 10px;
+}
+
+
+
+
+/*     -------------                   @End                ------------  */
