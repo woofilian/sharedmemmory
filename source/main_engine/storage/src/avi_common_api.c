@@ -187,42 +187,6 @@ void get_nowtime_str(char *str)
     return;
 }
 
-
-
-#if 0
-/**********************************************************************
-函数描述：根据参数打印出错误提示.
-入口参数：int ret: avi_record_open,avi_record_write,avi_record_close
-                   的返回值作为参数
-返回值：空
-**********************************************************************/
-void avi_print_err(int ret)
-{
-    switch(ret)
-    {
-        case STS_OPEN_FAILED:       PRINT_INFO("open the file failed. \n"); break;
-        case STS_INVALID_INPUT:     PRINT_INFO("invalid input. \n"); break;
-        case STS_MKDIR_ERROR:       PRINT_INFO("mkdir error. \n"); break;    
-        case STS_INVALID_FORAMT:    PRINT_INFO("invalid format. \n"); break;
-        case STS_MALLOC_FAILED:     PRINT_INFO("malloc error. \n"); break;  
-        case STS_FTRUNCATE_FAILED:  PRINT_INFO("ftruncate file failed. \n"); break;
-        case STS_RENAME_FAILED:     PRINT_INFO("rename error. \n"); break;   
-        case STS_POLL_FAILED:       PRINT_INFO("poll error. \n"); break; 
-        
-        case STS_RECORD_MODE_ERR:   PRINT_INFO("record mode error. \n"); break;
-        case STS_WRITE_FAILED:      PRINT_INFO("write failed. \n"); break;  
-        case STS_READ_FAILED:       PRINT_INFO("read failed. \n"); break;
-        case STS_SDCARD_NOT_MOUNT:  PRINT_INFO("sd card is not mounted. \n"); break;   
-        case STS_SDCARD_NO_SPACE:   PRINT_INFO("sd card don't have enough space. \n"); break;        
-        case STS_FISTFRAME_NOT_KEY: PRINT_INFO("the fist frame is not key frame. \n"); break;
-
-        case STS_INDEX_COUNT_ERR:   PRINT_INFO("the avi index count malloc error. \n"); break;
-        case STS_DOUBLE_CLOSE:      PRINT_INFO("double call close function. \n"); break;
-        default: PRINT_INFO(" error. \n"); break;
-    }
-}
-#endif
-
 /**********************************************************************
 函数描述：时间的tm格式转换成时间的GRD_TIME格式
 入口参数：struct tm *src: 源操作数

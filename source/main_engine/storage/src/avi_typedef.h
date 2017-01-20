@@ -12,9 +12,6 @@ extern "C" {
 #include <semaphore.h>
 #include "storage.h"
 
-/////#include "grd_sdk.h"
-//////#include "mmc_api.h"
-
 /* AVI flag, defined by aviriff.h */
 #define AVIF_HASINDEX        0x00000010 //表明AVI文 件包含一个index。
 #define AVIF_MUSTUSEINDEX    0x00000020 //表明应用程序需要使用index，而不是物理上的顺序，来定义数据的展现顺序。例如，该标志可以用于创建一个编辑用的帧列表。
@@ -23,6 +20,7 @@ extern "C" {
 #define AVIF_WASCAPTUREFILE  0x00010000 //表明该文件是一个用于捕获实时视频的，而特别分配的AVI 文 件。如果一个文件设置了该标志，在用户写该文件之前，应用程序应该发出警告，因为用户可能会对该文件进行碎片整理。
 #define AVIF_COPYRIGHTED     0x00020000 //表明AVI文 件包含了版权数据和软件。如果设置了改标志，将不允许软件对该数据进行拷贝。
 
+#define INDEX_ARRAY_MAX_NUMBER  2048  //申请索引的大小
 /* record mode */
 #define RECORD_FIXED_SIZE         0X1
 #define RECORD_FIXED_DURATION     0X2
@@ -49,19 +47,8 @@ extern "C" {
 
 #define NORMAL_RECORD_INDEX_TXT		"normal_record_index.txt"
 #define EVENT_RECORD_INDEX_TXT		"event_record_index.txt"
-//#define GRD_SD_MOUNT_POINT      "/mnt/nfs/record"
-
-#define _PLAYBACK_AV_SIMULTANEOUS
-
-#if 1
-/*******avi 中缺少的头文件全部放在这里***********/
-
-
-#endif
 
 //======================================================//
-
-
 typedef struct tagAviInitParam {
     int bps;
     int fps;
@@ -109,7 +96,8 @@ typedef struct AviFileTag {
 
     //index   内部索引的管理
     int    index_count;   //real index count
-    int    *idx_array;
+    //int    *idx_array;
+    int    idx_array[INDEX_ARRAY_MAX_NUMBER];
 	
 	//所以缓冲区管理
     int    idx_array_count;

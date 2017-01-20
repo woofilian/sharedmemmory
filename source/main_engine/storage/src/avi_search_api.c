@@ -3,9 +3,6 @@
 #include "avi_api.h"
 #include "log.h"
 #include "avi_typedef.h"
-//#include "AvObj.h"
-//#include "grd_sdcard.h"
-#include "grd_avi_pb_api.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
